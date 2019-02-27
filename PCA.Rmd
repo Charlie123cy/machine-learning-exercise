@@ -1,0 +1,44 @@
+---
+title: "PCL AND PCA"
+output: html_notebook
+---
+
+```{r}
+require(pls)
+require(ISLR)
+#scale:standardize each predictor
+#CV causes pcr() to compute the ten-fold cross-validation error 
+#of number(M) of principal components used
+pcr.fit=pcr(Salary~.,data=Hitters,scale=TRUE,validation="CV")
+summary(pcr.fit)
+#here it is root mean squared error. mse=rmse^2
+
+```
+```{r}
+#plot cross-validation scores
+validationplot(pcr.fit,val.type="MSEP")
+```
+```{r}
+#perform PCR on the training data and evaluate its test set performance
+set.seed(1)
+train=sample(1:nrow(Hitters),size=nrow(Hitters)/2)
+test=(-train)
+
+x=model.matrix(Salary~.,data=Hitters)[,-1]
+y.test=Hitters$Salary[!is.na(Hitters$Salary)][test]
+y=Hitters$Salary[!is.na(Hitters$Salary)]
+pcr.mod=pcr(Salary~.,data=Hitters,subset=train,scale=TRUE,validation="CV")
+validationplot(pcr.mod,val.type="MSEP")
+```
+```{r}
+#compute test MSE
+pred=predict(pcr.mod,x[test,],ncomp=7)
+mean((pred-y.test)^2)
+
+```
+```{r}
+#fit PCR on full data set
+pcr.full=pcr(y~x,scale=TRUE,ncom=7)
+summary(pcr.full)
+```
+

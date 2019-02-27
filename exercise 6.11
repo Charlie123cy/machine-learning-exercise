@@ -1,0 +1,62 @@
+---
+title: "exercise 6.11"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+require(ISLR)
+require(MASS)
+require(leaps)
+require(glmnet)
+require(pls)
+names(Boston)
+```
+
+a)
+1.ols with all variables
+```{r}
+model1=lm(crim~.,data=Boston)
+summary(model1)
+```
+2.Best Subset Selection
+```{r}
+model2=regsubsets(crim~.,data=Boston)
+plot(model2,scale="adjr2")
+```
+3.LASSO
+```{r}
+#glmnet() requires the x passed into in matrix format
+X=model.matrix(crim~.,Boston)[,-1] #first column is intercept
+y=Boston$crim[!is.na(Boston$crim)]
+
+#set value range for lambda
+grid=10^seq(10,-2,length=100)
+lasso.model=glmnet(X,y,alpha=1,lambda=grid,family="gaussian")
+#In the case of lasso and ridge models, CV helps choose the value of the tuning parameter lambda
+# you can do plot(reg) OR reg$lambda.min to see the value of lambda which results in the smallest CV error
+cvlambda=cv.glmnet(X,y,alpha=1)
+bestlambda=cvlambda$lambda.min
+lassobest=glmnet(X,y,alpha=1,lambda=bestlambda)
+```
+4.Lidget Regression
+```{r}
+lidget.model=glmnet(X,y,alpha=0,lambda=grid,family="gaussian")
+cvlambda=cv.glmnet(X,y,alpha=0)
+bestlambda=cvlambda$lambda.min
+lidgetbest=glmnet(X,y,alpha=0,lambda=bestlambda)
+```
+5.pca
+```{r}
+pcr=pcr(crim~.,data=Boston,scale=TRUE,validation="CV")
+validationplot(pcr,val.type="MSEP")
+validationplot(pcr)
+```
+
+```{r}
+
+```
+

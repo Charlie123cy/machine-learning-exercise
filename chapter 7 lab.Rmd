@@ -1,0 +1,42 @@
+---
+title: "7.8 Lab:Non-linear Modeling"
+output: html_notebook
+---
+
+
+```{r}
+library(ISLR)
+attach(Wage)
+```
+7.8.1 Polynomial Regression and Step Functions
+```{r}
+fit=lm(wage~poly(age,4),data=Wage)
+coef(summary(fit))
+```
+
+create a grid of values for age at which we want predictions
+```{r}
+agelims=range(age)
+age.grid=seq(from=agelims[1],to=agelims[2])
+preds=predict(fit,newdata=list(age=age.grid),se=TRUE)
+se.bands=cbind(preds$fit+2*preds$se.fit,preds$fit-2*preds$se.fit)
+```
+Plot the data and add the fit from the dgree-4 polynomial
+```{r}
+par(mfrow=c(1,2),mar=c(4.5,4.5,1,1),oma=c(0,0,4,0))
+plot(age,wage,xlim=agelims,cex=.5,col="darkgrey")
+
+title("Degree-4 Polynomial",outer=T)
+lines(age.grid,preds$fit,lwd=2,col="blue")
+matlines(age.grid,se.bands,lwd=1,col="blue",lty=3)
+```
+In performing a polynomial regression we must decide on the degree of the polynomial to use
+1.hypothesis test
+[fit models ranging from linear to a degree-5 polynomial]
+[find the one that is simplest and fits the model most]
+use anova()
+```{r}
+
+```
+
+

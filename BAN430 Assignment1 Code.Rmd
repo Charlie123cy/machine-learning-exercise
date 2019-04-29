@@ -1,0 +1,309 @@
+---
+title: "BAN430 Assignment1"
+output: 
+  word_document: 
+    fig_width: 8
+    highlight: null
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, eval=TRUE, echo=FALSE, warning=FALSE, error=FALSE}
+rm(list = ls())
+library(dplyr)
+library(ggplot2)
+library(tseries)
+library(fpp2)
+library(forecast)
+library(stlplus)
+```
+
+##Read data and make time series objects
+
+```{r, eval=TRUE, echo=FALSE, warning=FALSE, error=FALSE}
+rawdata <- read.csv("month_aus_prod_chocolate.csv", sep = ",")
+rawdata <- na.omit(rawdata)
+choco <- ts(rawdata$Month..Monthly.production.of.chocolate.confectionery.in.Australia..tonnes..July.1957...Aug.1995., start = c(1957,7), frequency = 12)
+train <- window(choco, end = c(1994,8))
+test <- window(choco, start = c(1994,9))
+
+```
+
+##Summary statistics and initial analysis
+
+
+```{r, eval=TRUE, echo=FALSE, warning=FALSE, error=FALSE}
+summary(choco)
+autoplot(choco) + xlab("Time") + ylab("Tonnes") + 
+  ggtitle("Graph 1: Monthly Production of Chocolate in Australia")
+ggAcf(choco, lag.max = 50) + ggtitle("Graph 2: ACF of series choco")
+regchoco <- tslm(choco ~ trend + season)
+summary(regchoco)
+```
+
+
+```{r, eval=TRUE, echo=FALSE, warning=FALSE, error=FALSE}
+lchoco <- log(choco)
+autoplot(lchoco) + xlab("Time") + ylab("Tonnes") + 
+  ggtitle("Graph 3: Log-transformed Monthly Production of Chocolate in Australia")
+ggAcf(lchoco, lag.max = 50) + ggtitle("Graph 4: ACF of series lchoco")
+reglchoco <- tslm(lchoco ~ trend + season)
+summary(reglchoco)
+```
+
+
+```{r, eval=TRUE, echo=FALSE, warning=FALSE, error=FALSE}
+dchoco <- diff(lchoco, differences = 1)
+autoplot(dchoco) + xlab("Time") + ylab("Tonnes") + 
+  ggtitle("Graph 5: Differencef Log Monthly Production of Chocolate in Australia")
+ggAcf(dchoco, lag.max = 50) + ggtitle("Graph 6: ACF of series dchoco")
+regdchoco <- tslm(dchoco ~ trend + season)
+summary(regdchoco)
+
+```
+
+##Decompose the series
+
+
+```{r, eval=TRUE, echo=FALSE, warning=FALSE, error=FALSE}
+
+season_1<-stlplus(choco,s.window = 9, robust = TRUE,n.p=12)
+plot_seasonal(season_1, main="Graph 7: Seasonal-diagnostic plot (9)")
+season_2<-stlplus(choco,s.window = 21, robust = TRUE,n.p=12)
+plot_seasonal(season_2, main="Graph 8: Seasonal-diagnostic plot (21)")
+season_3<-stlplus(choco,s.window = 35, robust = TRUE,n.p=12)
+plot_seasonal(season_3, main="Graph 9: Seasonal-diagnostic plot (35)")
+```
+
+
+```{r, eval=TRUE, echo=FALSE, warning=FALSE, error=FALSE}
+choco %>% 
+  stl(t.window = 17, s.window = 35, robust = TRUE) %>%
+  autoplot()+
+  ggtitle("Graph 10: A robust STL decomposition of the chocolate production data")
+
+```
+
+##Forecast the components
+
+```{r, eval=TRUE, echo=FALSE, warning=FALSE, error=FALSE}
+#Decompose Forecast Code
+
+#1. arima--remainder, rwf==trendcycle
+fit <- stl(train, t.window = 17, s.window = 35, robust = TRUE)
+sc <- forecast::seasonal(fit)
+rc <- forecast::remainder(fit)
+tc <- forecast::trendcycle(fit)
+ggtsdisplay(rc) + ggtitle("Graph 11: Summary statistic of remainder component")
+
+fsc <- snaive(sc,h=12)
+frc <- forecast(auto.arima(rc),h=12)
+ftc <- rwf(tc,h=12)
+
+
+#calculate forecast value
+f_value <- as.numeric(fsc$mean)+as.numeric(frc$mean)+as.numeric(ftc$mean)
+
+
+#calculate value of PI
+PI_lo_80 <- as.numeric(fsc$mean)+as.numeric(frc$lower[,1])+
+  as.numeric(ftc$lower[,1])
+PI_lo_95 <- as.numeric(fsc$mean)+as.numeric(frc$lower[,2])+
+  as.numeric(ftc$lower[,2])
+PI_hi_80 <- as.numeric(fsc$mean)+as.numeric(frc$upper[,1])+
+  as.numeric(ftc$upper[,1])
+PI_hi_95 <- as.numeric(fsc$mean)+as.numeric(frc$upper[,2])+
+  as.numeric(ftc$upper[,2])
+
+#make df to store all PI value
+PI_df <- data.frame(lo_80=PI_lo_80,lo_95=PI_lo_95,
+                    hi_80=PI_hi_80,hi_95=PI_hi_95,
+                    date=seq(from=as.Date("1994/9/1"),
+                             to=as.Date("1995/8/31"),
+                             by="month"))
+
+
+
+whole_df = data.frame(production=c(rawdata[1:446,1],f_value),
+                      date=seq(from=as.Date("1957/7/1"),
+                               to=as.Date("1995/8/31"),
+                               by="month"),
+                      col=c(rep("blue",446),rep("red",12)))
+
+PI_df2 <- data.frame(lo_80=c(rawdata[1:446,1],PI_lo_80),
+                     lo_95=c(rawdata[1:446,1],PI_lo_95),
+                     hi_80=c(rawdata[1:446,1],PI_hi_80),
+                     hi_95=c(rawdata[1:446,1],PI_hi_95),
+                     date=seq(from=as.Date("1957/7/1"),
+                              to=as.Date("1995/8/31"),
+                              by="month"))
+
+ggplot(whole_df,aes(x=date,y=production))+
+  geom_line(aes(colour=col))+
+  geom_ribbon(aes(ymin=PI_df2$lo_80, ymax=PI_df2$hi_80), 
+              alpha=0.1,       
+              linetype=0,      
+              colour="grey", 
+              size=1,          
+              fill="dark blue")+
+  geom_ribbon(aes(ymin=PI_df2$lo_95, ymax=PI_df2$hi_95), 
+              alpha=0.1,       
+              linetype=0,      
+              colour="grey", 
+              size=1,          
+              fill="blue")+
+  ggtitle("Graph 12: Forecast from STL (remainder-arima, trendcycle-rwf)")
+
+#zoom in
+train_df_2 = data.frame(production=whole_df[391:458,1],
+                        date=seq(from=as.Date("1990/1/1"),
+                                 to=as.Date("1995/8/31"),
+                                 by="month"),
+                        col=c(rep("blue",56),rep("red",12)))
+
+PI_df2_2 <- data.frame(lo_80=c(train_df_2[391:446,1],PI_lo_80),
+                       lo_95=c(train_df_2[391:446,1],PI_lo_95),
+                       hi_80=c(train_df_2[391:446,1],PI_hi_80),
+                       hi_95=c(train_df_2[391:446,1],PI_hi_95),
+                       date=seq(from=as.Date("1990/1/1"),
+                                to=as.Date("1995/8/31"),
+                                by="month"))
+ggplot(train_df_2,aes(x=date,y=production))+
+  geom_line(aes(colour=col))+
+  geom_ribbon(aes(ymin=PI_df2_2$lo_80, ymax=PI_df2_2$hi_80), 
+              alpha=0.1,       
+              linetype=0,      
+              colour="grey", 
+              size=1,          
+              fill="dark blue")+
+  geom_ribbon(aes(ymin=PI_df2_2$lo_95, ymax=PI_df2_2$hi_95), 
+              alpha=0.1,       
+              linetype=0,      
+              colour="grey", 
+              size=1,          
+              fill="blue")+
+  ggtitle("Graph 13: Forecast from STL (remainder-arima, trendcycle-rwf)
+          (Zoomed from 1990)")
+
+
+#2.ets for trendcycle
+fit <- stl(train, t.window = 17, s.window = 35, robust = TRUE)
+sc <- forecast::seasonal(fit)
+rc <- forecast::remainder(fit)
+tc <- forecast::trendcycle(fit)
+
+
+fsc <- snaive(sc,h=12)
+frc <- forecast(auto.arima(rc),h=12)
+ftc <- forecast(ets(tc),h=12)
+#calculate forecast value
+f_value_3 <- as.numeric(fsc$mean)+as.numeric(frc$mean)+as.numeric(ftc$mean)
+
+train_data<- rawdata[1:446,]
+forecast_data <- c(rawdata[1:446,],f_value_3)
+
+
+#calculate value of PI
+PI_lo_80 <- as.numeric(fsc$mean)+as.numeric(frc$lower[,1])+
+  as.numeric(ftc$lower[,1])
+PI_lo_95 <- as.numeric(fsc$mean)+as.numeric(frc$lower[,2])+
+  as.numeric(ftc$lower[,2])
+PI_hi_80 <- as.numeric(fsc$mean)+as.numeric(frc$upper[,1])+
+  as.numeric(ftc$upper[,1])
+PI_hi_95 <- as.numeric(fsc$mean)+as.numeric(frc$upper[,2])+
+  as.numeric(ftc$upper[,2])
+##########################################
+
+
+#make df to store all PI value
+PI_df <- data.frame(lo_80=PI_lo_80,lo_95=PI_lo_95,
+                    hi_80=PI_hi_80,hi_95=PI_hi_95,
+                    date=seq(from=as.Date("1994/9/1"),
+                             to=as.Date("1995/8/31"),
+                             by="month"))
+
+
+#make df to display the forecast results of each method
+compare_df <- data.frame(ARIMA=f_value,
+                         ETS2=f_value_3,
+                         real_value=rawdata[447:458,])
+
+#cal rmse of each method
+RMSE = function(m, o){
+  sqrt(mean((m - o)^2))
+}
+method1=RMSE(compare_df$real_value, compare_df$ARIMA)
+method2=RMSE(compare_df$real_value, compare_df$ETS2)
+method1
+method2
+```
+
+##Select an appropriate ETS model
+
+
+```{r, eval=TRUE, echo=FALSE, warning=FALSE, error=FALSE}
+
+etsfit <- ets(train)
+summary(etsfit)
+autoplot(etsfit) + ggtitle("Graph 14: Components of selected ETS(M,A,M) model")
+
+cbind("Risiduals" = residuals(etsfit),
+      "Forecast errors" = residuals(etsfit, type = "response"))%>%
+  autoplot(facet = T) + xlab("Year") + ylab("") + 
+  ggtitle("Graph 15: Plots of residuals and forecast errors")
+
+etsfit %>% forecast(h=12) %>%
+  autoplot() +
+  ggtitle("Graph 16: ETS forecasts of chocolate production for the period
+          1994:M9 to 1995:M8") +
+  xlab("Year") + ylab("Tonnes")
+
+etsfit %>% forecast(h=12) %>%
+  autoplot() +
+  ggtitle("Graph 17: ETS forecasts of chocolate production for the period
+          1994:M9 to 1995:M8 (plot from 1980)") +
+  xlab("Year") + ylab("Tonnes") +
+  coord_cartesian(xlim = c(1980,1996)) 
+
+forets <- forecast(etsfit, h=12)
+accuracy(forets, test)
+
+checkresiduals(etsfit,plot = T) 
+
+
+```
+
+##Reproduce tsCV()
+
+```{r, eval=TRUE, echo=FALSE, warning=FALSE, error=FALSE}
+# tsCV
+length(window(choco, end = c(1993,8))) - 1 # 433
+etscv <- tsCV(choco, snaive, h = 2, initial = 433)
+sqrt(mean(etscv[,1]^2, na.rm = T))
+sqrt(mean(etscv[,2]^2, na.rm = T))
+
+# Reproduction
+
+k <- 433 # minimum data length for fitting a model
+n <- length(choco)
+err <- matrix(NA, n-k-1, 2)
+st_date <- tsp(choco)[1]+(k-1)/12
+h <- 2
+
+for(i in 1:(n-k-1))
+{
+  train <- window(choco, end = st_date + i/12)
+  test <- window(choco, start = st_date + (i+1)/12, end = st_date + (i+2)/12)
+  fit <- snaive(train,h=2)
+  err[i,1] <- (test[1]-fit$mean[1])
+  err[i,2] <- (test[2]-fit$mean[2])
+  
+}
+
+sqrt(mean((err[,1]^2),na.rm = T))
+sqrt(mean((err[,2]^2),na.rm = T))
+
+
+```
